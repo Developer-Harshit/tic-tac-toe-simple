@@ -33,66 +33,119 @@ function display_message(str){
  0 = draw
 -1 = nothing
  */
-function has_winner(n_board,p_turn){
-    let player = p_turn ? -1 : +1;
+function has_winner(board,turn){
+    let player = turn ? -1 : +1;
     
     // horizontaL
     for(let j = 0; j < 3; j++){
         let counter = 0;
         for(let i = 0; i < 3; i++){
             let idx = i + j * 3;
-            if (n_board[idx] == player) counter++;
+            if (board[idx] == player) counter++;
         }
-        if (counter == 3) return 1;
+        if (counter == 3) return player;
     }
     // vertical
     for(let i = 0; i < 3; i++){
         let counter = 0;
         for(let j = 0; j < 3; j++){
             let idx = i + j * 3;
-            if (n_board[idx] == player) counter++;
+            if (board[idx] == player) counter++;
         }
-        if (counter == 3) return 1;
+        if (counter == 3) return player;
     }
     if (((
         // diagonal 1
-            n_board[0] == player &&
-            n_board[4] == player &&
-            n_board[8] == player) ||
+            board[0] == player &&
+            board[4] == player &&
+            board[8] == player) ||
         (
         // diagonal 2
-            n_board[2] == player &&
-            n_board[4] == player &&
-            n_board[6] == player
+            board[2] == player &&
+            board[4] == player &&
+            board[6] == player
         ))){
-        return 1;
+        return player;
     }
     for (let i = 0; i < 9; i++) {
-        if (n_board[i] == 0 ) return -1;   
+        if (board[i] == 0 ) return 2;
     }
     return 0;
 
 }
 
-function on_block_click(ev){
-    if (ev.target.classList.contains("locked") || game_ended || is_ai) {
+
+function minimax(board,turn,depth){
+    let state = has_winner(board,turn);
+    if (depth == 0 && state == 2) state = 0;
+    if (state != 2 || depth == 0) return state;
+    depth--;
+
+    // minimizing player
+    // let player = turn ? 1 : -1;
+    if (turn){
+        let value = 100;
+        for (let i = 0; i < 9; i++) {
+            if(board[i] != 0) continue;
+            board[i] = 1;
+            value = Math.min(value, minimax(board,false,depth));
+            board[i] = 0;
+        }
+        return value;
+    }
+    // maxmizing player
+    else{
+        let value = -100;
+        for (let i = 0; i < 9; i++) {
+            if(board[i] != 0) continue;
+            board[i] = -1;
+            value = Math.max(value, minimax(board,true,depth));
+            board[i] = 0;
+        }
+        return value;
+    }
+}
+
+function play_best_move(){
+
+    const player = turn ? -1 : 1;
+    let best_score = 0;
+    let best_idx = -1;
+    for (let i = 0; i < 9; i++) {
+        if(board[i] != 0) continue;
+        board[i] = player;
+        let score = minimax(board,turn,20);
+        if (best_idx == -1){
+            best_score = score;
+            best_idx = i;
+        }
+        if((turn && score < best_score) || (!turn && score > best_score)){
+            best_score = score;
+            best_idx = i;
+        }
+        board[i] = 0;
+    }
+    let sign_div = document.querySelector(`[data-idx="${best_idx}"]`);
+    if (!sign_div){
         error_sound.play();
         return;
     }
-
+    play_move(sign_div);
+}
+function play_move(target){
     let sign = turn ? "circle" : "cross";
     let msg = "Its<span>";
     msg += !turn ? "O" : "X";
     msg += "</span>'s turn";
-    
-    let idx = +ev.target.dataset.idx;
-    ev.target.classList.add(sign);
-    ev.target.classList.add("locked");
-    turn ? board[idx]= -1 : board[idx] = +1;
+
+    let idx = +target.dataset.idx;
+    target.classList.add(sign);
+    target.classList.add("locked");
+    turn ? board[idx] = -1 : board[idx] = +1;
 
     let state = has_winner(board,turn);
     
-    if (state == 1 || state == 0){
+    if (state != 2){
         game_ended = true;
         msg = "Game ended , ";
         if (state == 0) msg += "Nobody won"
@@ -108,7 +161,13 @@ function on_block_click(ev){
     move_sound.play();
     turn = !turn;
 }
-
+function on_block_click(ev){
+    if (ev.target.classList.contains("locked") || game_ended || is_ai) {
+        error_sound.play();
+        return;
+    }
+    play_move(ev.target);
+}
 function create_block(idx){
     const block_div = document.createElement("div");
     
@@ -128,11 +187,22 @@ function generate_board(){
     for(let j = 0; j < 3; j++){
         for(let i = 0; i < 3; i++){
             let idx = i + j * 3;
-            console.log(idx);
             board_div.appendChild(create_block(idx));
         }
     }
-    console.log(board_div);
+
+    const ai_btn =  document.getElementById("ai-btn");
+    ai_btn.addEventListener("click",()=>{
+        if(game_ended || has_winner(board,turn) != 2) {
+            error_sound.play();
+            return;
+        }
+        is_ai = true;
+        setTimeout(()=>{
+            play_best_move();
+            is_ai = false;
+        },100);
+    });
 }
 function reset_board(){
     turn = true;
@@ -142,6 +212,7 @@ function reset_board(){
         0,0,0
     ];
     game_ended = false;
+    is_ai = false;
     display_message("Game Started");
     const sign_div_list = document.querySelectorAll(".sign-div");
     sign_div_list.forEach(sign_div => {
